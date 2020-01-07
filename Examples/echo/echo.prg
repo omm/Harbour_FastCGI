@@ -4,18 +4,22 @@
 
 Function Main()
 
-local iInputLength := 0
-local cInput := ""
+local iInputLength  := 0
+local cInput        := ""
 local cQUERY_STRING := ""
 local cVar
 
 SendToDebugView("Starting echo")
 
-oFcgi := hb_Fcgi():New()
+// oFcgi := hb_Fcgi():New()
+oFcgi := MyFcgi():New()    // Used a subclass of hb_Fcgi
 
 do while oFcgi:Wait()
-    oFcgi:Print("<h1>FastCGI echo version 104</h1>")
-    
+    SendToDebugView("Request Counter",oFcgi:RequestCount)
+
+    oFcgi:Print([<!DOCTYPE html><html><body>])
+
+    oFcgi:Print("<h1>FastCGI echo</h1>")
     oFcgi:Print("<p>FastCGI EXE   = "+oFcgi:FastCGIExeFullPath+"</p>")
     oFcgi:Print("<p>SCRIPT_NAME   = "+oFcgi:GetEnvironment("SCRIPT_NAME")+"</p>")
     oFcgi:Print("<p>REQUEST_URI   = "+oFcgi:GetEnvironment("REQUEST_URI")+"</p>")
@@ -38,6 +42,7 @@ do while oFcgi:Wait()
     // oFcgi:SaveInputFileContent("File2","d:\281\"+oFcgi:GetInputFileName("File2"))
     // oFcgi:SaveInputFileContent("File3","d:\281\"+oFcgi:GetInputFileName("File3"))
     // oFcgi:SaveInputFileContent("File4","d:\281\"+oFcgi:GetInputFileName("File4"))
+    oFcgi:Print([</body></html>])
 
 enddo
 
@@ -46,4 +51,18 @@ SendToDebugView("Done")
 return nil
 
 //=================================================================================================================
+
+class MyFcgi from hb_Fcgi
+    method OnFirstRequest()
+    method OnShutdown()
+endclass
+
+method OnFirstRequest class MyFcgi
+    SendToDebugView("Called from method OnFirstRequest")
+return nil 
+
+method OnShutdown class MyFcgi
+    SendToDebugView("Called from method OnShutdown")
+return nil 
+
 //=================================================================================================================

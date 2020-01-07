@@ -1,6 +1,6 @@
-#-inc
-
 -hbexe
+-inc
+-workdir=${HB_COMPILER}\${BuildMode}\hbmk2\
 
 -prgflag=-DINAPACHE
 
@@ -17,3 +17,4 @@ harbour.def
 mod_harbour.prg
 
 ..\..\hb_fcgi\hb_fcgi.hbm
+..\..\hb_fcgi\debugger.hbm

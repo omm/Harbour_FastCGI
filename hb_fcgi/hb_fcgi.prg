@@ -8,7 +8,7 @@
 
 class hb_Fcgi
     hidden:
-        data   DefaultContentType         init "Content-type: text/html"
+        data   DefaultContentType         init "Content-type: text/html; charset=UTF-8"
         data   TransmittedContentType     init ""
 
         data   LoadedRequestEnvironment   init .f.
@@ -58,7 +58,11 @@ class hb_Fcgi
         method IsPost()                             SETGET   //Used to query if the page was sent as a POST request
         //_M_ method GetHeader(cName)  // TODO
 
-ENDCLASS
+        method OnFirstRequest() inline nil
+        method OnShutdown()     inline nil
+
+endclass
+
 
 //-----------------------------------------------------------------------------------------------------------------
 method New() class hb_Fcgi
@@ -74,75 +78,81 @@ return Self
 method Wait() class hb_Fcgi
     //Used to wait for the next page request
     local lProcessRequest      //If web page should be built
-    local lValidRequest := .f.
     local cREQUEST_URI
     local iWaitResult
+    local cDownFileName
+    local nPos
 
     if ::ProcessingRequest
         ::Finish()
     endif
 
-    do while !lValidRequest  //Needed a loop in case processed invalid .kill requests
-        if ::MaxRequestToProcess > 0 .and. ::RequestCount >= ::MaxRequestToProcess
-            //Reached Max Number of Requests to Process
-            lValidRequest   := .t.
-            lProcessRequest := .f.
-        else
-            if (iWaitResult := hb_Fcgx_Wait()) >= 0
-                ::RequestCount++
-        
-                ::TransmittedContentType   := ""
-                ::LoadedRequestEnvironment := .f.
-                ::LoadedQueryString        := .f.
-                ::LoadedInput              := .f.
-                ::LoadedHeader             := .f.
-        
-                hb_HClear(::RequestEnvironment)
-                hb_HClear(::QueryString)
-                hb_HClear(::Input)
-                hb_HClear(::Header)
-        
-                ::InputLength              := -1
-                ::InputRaw                 := ""
-        
-                ::RequestMethod           := ""
-        
-                if ::ReloadConfigAtEveryRequest .or. !::LoadedAppConfig
-                    ::LoadAppConfig()
-                endif
-        
-                cREQUEST_URI := ::GetEnvironment("REQUEST_URI")
-                SendToDebugView("cREQUEST_URI",cREQUEST_URI)
-                if right(cREQUEST_URI,5) == ".kill"
-                    if file(left(::FastCGIExeFullPath,len(::FastCGIExeFullPath)-3)+"kill")
-                        //_M_ should we delete the .kill ? only it there is only 1 handle on the current exe.
-                        //_M_Test number of instances of current exe in memory
-                        // SendToDebugView("Marker 1",::FastCGIExeFullPath)
-                        // SendToDebugView("Marker 2",left(::FastCGIExeFullPath,len(::FastCGIExeFullPath)-3)+"kill")
-                        // SendToDebugView("Remote Kill of "+::FastCGIExeFullPath)
-                        ::Print("Remote Kill")
-                        ::Finish()
-                        lValidRequest   := .t.
-                        lProcessRequest := .f.
-                    else
-                        ::Print("Invalid Kill Request")
-                        ::Finish()
-                        lValidRequest   := .f.  // Will stay in this method and not try to build a web page
-                        lProcessRequest := .f.
-                    endif
-                else
-                    lValidRequest   := .t.
-                    lProcessRequest := .t.
-                endif
-            else
-                // Add code to log why the wait failed. Use the variable iWaitResult
-                lValidRequest   := .t.
-                lProcessRequest := .f.
+    if ::MaxRequestToProcess > 0 .and. ::RequestCount >= ::MaxRequestToProcess
+        //Reached Max Number of Requests to Process. This will happen after a page finished to build, and we are back in waiting request mode.
+        lProcessRequest := .f.
+    else
+        if (iWaitResult := hb_Fcgx_Wait()) >= 0
+            ::TransmittedContentType   := ""
+            ::LoadedRequestEnvironment := .f.
+            ::LoadedQueryString        := .f.
+            ::LoadedInput              := .f.
+            ::LoadedHeader             := .f.
+    
+            hb_HClear(::RequestEnvironment)
+            hb_HClear(::QueryString)
+            hb_HClear(::Input)
+            hb_HClear(::Header)
+            
+            ::InputLength              := -1
+            ::InputRaw                 := ""
+    
+            ::RequestMethod           := ""
+    
+            if ::ReloadConfigAtEveryRequest .or. !::LoadedAppConfig
+                ::LoadAppConfig()
             endif
+    
+            cREQUEST_URI := ::GetEnvironment("REQUEST_URI")
+            // SendToDebugView("cREQUEST_URI",cREQUEST_URI)
+
+            if file(left(::FastCGIExeFullPath,len(::FastCGIExeFullPath)-3)+"kill")
+                // altd()
+                nPos := hb_RAt("\backend\",lower(::FastCGIExeFullPath))   // _M_ Make this non Windows ready
+                if empty(nPos)
+                    ::Print([Site is down. Could not locate "down.html".])
+                else
+                    cDownFileName = left(::FastCGIExeFullPath,nPos)+"website\down.html"
+                    if file(cDownFileName)
+                        ::Print(hb_MemoRead(cDownFileName))
+                    else
+                        ::Print([Site is down. Add a "down.html" file.])
+                    endif
+                endif
+                lProcessRequest := .f.
+                ::ProcessingRequest := .t. //Since issued ::Print()
+                ::Finish()
+            else
+                ::RequestCount++
+                lProcessRequest := .t.
+            endif
+    
+        else
+            // Add code to log why the wait failed. Use the variable iWaitResult
+            lProcessRequest := .f.
         endif
-    enddo
+    endif
 
     ::ProcessingRequest = lProcessRequest
+
+    if ::ProcessingRequest
+        if ::RequestCount == 1
+            ::OnFirstRequest()
+        endif
+    else
+        if ::RequestCount > 0
+            ::OnShutdown()
+        endif
+    endif
 
 return lProcessRequest
 //-----------------------------------------------------------------------------------------------------------------
@@ -394,6 +404,7 @@ method LoadAppConfig() class hb_Fcgi
     local cName
     local cValue
     local iNumberOfConfigs := 0
+    //The configuration file is purposely not with a .txt extension to block users from accessing it.
     cConfigText := hb_MemoRead(hb_DirBase()+"config.txt")
     cConfigText := StrTran(StrTran(cConfigText,chr(13)+chr(10),chr(10)),chr(13),chr(10))
     for each cLine in hb_ATokens(cConfigText,chr(10),.f.,.f.)

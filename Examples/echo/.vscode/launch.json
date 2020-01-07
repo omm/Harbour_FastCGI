@@ -4,11 +4,12 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+    
         {
             "type": "harbour-dbg",
             "request": "attach",
             "name": "Attach Program echo.exe",
-            "program": "R:\\Harbour_websites\\fcgi_echo\\FCGIecho.exe",
+            "program": "R:\\Harbour_websites\\fcgi_echo\\backend\\FCGIecho.exe",
             "sourcePaths": [
                 "${workspaceFolder}"
             ]
